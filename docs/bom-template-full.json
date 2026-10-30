@@ -1,0 +1,18 @@
+{
+  "_说明": "工程用的一套：比 Ican 格式多了层级、单重、总重、备注。复制到项目根目录改名 bom-template.json 即可。",
+  "columns": [
+    ["序号", "no"],
+    ["层级", "level"],
+    ["图号", "code"],
+    ["名称", "name"],
+    ["数量", "qty"],
+    ["材料", "material"],
+    ["表面处理", "surface"],
+    ["品牌", "brand"],
+    ["零件类型", "ptype"],
+    ["单位", "unit"],
+    ["单重(kg)", "unit_mass"],
+    ["总重(kg)", "total_mass"],
+    ["备注", "note"]
+  ]
+}

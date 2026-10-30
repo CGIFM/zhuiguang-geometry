@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>ZGR meshgen</title>
+<style>
+  html,body{margin:0;height:100%;font:13px/1.5 system-ui,"Microsoft YaHei",sans-serif;
+            background:#f4f6fa;color:#33405a}
+  #s{padding:12px 16px;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div id="s">准备中…</div>
+<script src="vendor/occt/occt-import-js.js"></script>
+<script type="module">
+/* 无头浏览器里的网格生成器：把 STEP/IGES/STL 解成三角形，按对象号回存成 ZGM。
+ *
+ * 为什么要它：SolidWorks 2024 在本机打不开 STEP/IGES（OpenDoc 一律返回 Nothing），
+ * 但网页里内置的 occt-import-js 能解。解一次存成 ZGM，之后两台机器都用同一条
+ * thumb3d 管线出缩略图，样式也和 SolidWorks 零件一致。
+ *
+ * 用法（由 `zgr.py warm-neutral` 拉起）：
+ *   http://127.0.0.1:8795/meshgen.html?path=<项目路径>&oid=<64位对象号>&file=<相对路径>
+ */
+import * as THREE from './vendor/three/three.module.min.js';
+import { STLLoader } from './vendor/three/STLLoader.js';
+
+const qs = new URLSearchParams(location.search);
+const path = qs.get('path') || '';
+const oid = (qs.get('oid') || '').trim();
+const file = qs.get('file') || '';
+const ext = (file.split('.').pop() || '').toLowerCase();
+const S = document.getElementById('s');
+
+function say(t) {
+  S.textContent = t;
+  document.title = t.length > 60 ? t.slice(0, 60) : t;
+  console.log(t);
+}
+
+const NEUTRAL = ['step', 'stp', 'igs', 'iges', 'x_t', 'x_b', 'brep'];
+
+function loadOcct() {
+  return new Promise((resolve, reject) => {
+    if (!window.occtimportjs) return reject(new Error('occt 脚本没加载'));
+    Promise.resolve(window.occtimportjs({ locateFile: (f) => 'vendor/occt/' + f }))
+      .then(resolve, reject);
+  });
+}
+
+async function fetchBytes() {
+  const url = '/api/file?' + new URLSearchParams({ path, oid });
+  const rsp = await fetch(url, { cache: 'no-store' });
+  if (!rsp.ok) throw new Error('取文件失败 HTTP ' + rsp.status);
+  return new Uint8Array(await rsp.arrayBuffer());
+}
+
+/* 统一成 [{pos: Float32Array, idx: Uint32Array|null}] */
+async function parse(bytes) {
+  if (NEUTRAL.includes(ext)) {
+    const occt = await loadOcct();
+    const res = ext === 'igs' || ext === 'iges'
+      ? occt.ReadIgesFile(bytes, null)
+      : occt.ReadStepFile(bytes, null);
+    if (!res || !res.success || !res.meshes || !res.meshes.length) {
+      throw new Error('模型里没有可显示的面');
+    }
+    return res.meshes.map((m) => ({
+      pos: new Float32Array(m.attributes.position.array),
+      idx: m.index ? new Uint32Array(m.index.array) : null,
+    }));
+  }
+  if (ext === 'stl') {
+    const geo = new STLLoader().parse(bytes.buffer.slice(
+      bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+    const pos = geo.getAttribute('position');
+    const index = geo.getIndex();
+    return [{
+      pos: new Float32Array(pos.array),
+      idx: index ? new Uint32Array(index.array) : null,
+    }];
+  }
+  throw new Error('这个格式还不知道怎么解：' + ext);
+}
+
+/* ZGM1 | u32 顶点数 | u32 三角数 | f32 x,y,z * n | u32 i0,i1,i2 * m */
+function buildZgm(meshes) {
+  let nv = 0;
+  let ni = 0;
+  for (const m of meshes) {
+    nv += m.pos.length / 3;
+    ni += m.idx ? m.idx.length : m.pos.length / 3;
+  }
+  if (!nv || !ni) throw new Error('模型里没有三角形');
+  if (ni % 3) throw new Error('三角形索引不是 3 的倍数');
+  if (ni / 3 > 3000000) throw new Error('面数太多（' + (ni / 3) + '），网页转不动');
+  const buf = new ArrayBuffer(12 + nv * 12 + ni * 4);
+  const dv = new DataView(buf);
+  dv.setUint8(0, 0x5a); dv.setUint8(1, 0x47); dv.setUint8(2, 0x4d); dv.setUint8(3, 0x31);
+  dv.setUint32(4, nv, true);
+  dv.setUint32(8, ni / 3, true);
+  let off = 12;
+  for (const m of meshes) {
+    new Uint8Array(buf, off, m.pos.byteLength).set(
+      new Uint8Array(m.pos.buffer, m.pos.byteOffset, m.pos.byteLength));
+    off += m.pos.byteLength;
+  }
+  const out = new Uint32Array(buf, 12 + nv * 12, ni);
+  let base = 0;
+  let w = 0;
+  for (const m of meshes) {
+    const cnt = m.idx ? m.idx.length : (m.pos.length / 3);
+    for (let i = 0; i < cnt; i++) out[w++] = (m.idx ? m.idx[i] : i) + base;
+    base += m.pos.length / 3;
+  }
+  return buf;
+}
+
+function toB64(buf) {
+  const bytes = new Uint8Array(buf);
+  const CH = 0x8000;
+  let s = '';
+  for (let i = 0; i < bytes.length; i += CH) {
+    s += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  }
+  return btoa(s);
+}
+
+async function main() {
+  if (!oid || oid.length !== 64) throw new Error('缺少对象号');
+  say('读取文件…');
+  const bytes = await fetchBytes();
+  say('解析（' + ext + '，' + Math.round(bytes.byteLength / 1024) + ' KB）…');
+  const meshes = await parse(bytes);
+  say('打包网格…');
+  const zgm = buildZgm(meshes);
+  say('回存 ' + Math.round(zgm.byteLength / 1024) + ' KB…');
+  const rsp = await fetch('/api/mesh/put', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      path, oid, file, ua: navigator.userAgent, zgm: toB64(zgm),
+    }),
+  });
+  const res = await rsp.json().catch(() => ({}));
+  if (!rsp.ok || !res.ok) throw new Error(res.error || ('回存失败 HTTP ' + rsp.status));
+  say('OK ' + res.tris + ' 面');
+  document.documentElement.dataset.done = '1';
+}
+
+main().catch((e) => {
+  say('ERR ' + (e && e.message ? e.message : e));
+});
+</script>
+</body>
+</html>

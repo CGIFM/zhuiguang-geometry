@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  追光几何 · Windows Installer（MSI）主定义
+  由 tools/build_msi.py 调用 candle/light 编译，请不要手改版本号。
+
+  设计取向：
+    · 按用户安装（%LOCALAPPDATA%\Programs\ZhuiguangGeometry），全程不要管理员
+    · 桌面图标直接指向原生客户端 追光几何.exe，不经过浏览器
+    · 在「应用和功能」里以标准 MSI 条目出现，可 msiexec /x 卸载
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*"
+           Name="追光几何"
+           Language="2052"
+           Version="$(var.AppVer)"
+           Manufacturer="jlc"
+           Codepage="65001"
+           UpgradeCode="7C1F5A2E-3B4D-4E6A-9F1C-2D8B6A4E5C31">
+
+    <Package InstallerVersion="500"
+             Compressed="yes"
+             InstallScope="perUser"
+             InstallPrivileges="limited"
+             Description="追光几何 · 本地版本记录与内网同步" />
+
+    <!-- 同 UpgradeCode 的新版本覆盖旧版本；不允许往低版本降级安装 -->
+    <MajorUpgrade DowngradeErrorMessage="已经安装了更新版本的追光几何，请先卸载。" />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <!-- 显式按用户安装：不写 HKLM、不要管理员 -->
+    <Property Id="ALLUSERS" Value="2" />
+    <Property Id="MSIINSTALLPERUSER" Value="1" />
+
+    <Icon Id="ZgrIcon" SourceFile="$(var.RepoRoot)\assets\zgr.ico" />
+    <Property Id="ARPPRODUCTICON" Value="ZgrIcon" />
+    <Property Id="ARPCOMMENTS" Value="给文件夹拍快照、看时间线、对比恢复、两台机器内网同步" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="LocalAppDataFolder">
+        <Directory Id="ProgramsFolder" Name="Programs">
+          <Directory Id="INSTALLFOLDER" Name="ZhuiguangGeometry" />
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="AppMenuFolder" Name="追光几何" />
+      </Directory>
+      <Directory Id="DesktopFolder" />
+    </Directory>
+
+    <!-- 开始菜单 -->
+    <DirectoryRef Id="AppMenuFolder">
+      <Component Id="StartMenuShortcut" Guid="A1C0E4D2-6C1B-4F6E-9C3A-2E5B7D9F1A31">
+        <Shortcut Id="AppStartMenu"
+                  Name="追光几何"
+                  Description="本地版本记录 + 内网同步"
+                  Target="[INSTALLFOLDER]追光几何.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="ZgrIcon" />
+        <RemoveFolder Id="RemoveAppMenuFolder" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\ZhuiguangGeometry"
+                       Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <!-- 桌面图标 -->
+    <DirectoryRef Id="DesktopFolder">
+      <Component Id="DesktopShortcut" Guid="B2D1F5E3-7D2C-4A7F-8D4B-3F6C8E0A2B42">
+        <Shortcut Id="AppDesktop"
+                  Name="追光几何"
+                  Description="本地版本记录 + 内网同步"
+                  Target="[INSTALLFOLDER]追光几何.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="ZgrIcon" />
+        <RegistryValue Root="HKCU" Key="Software\ZhuiguangGeometry"
+                       Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <Feature Id="MainFeature" Title="追光几何" Level="1"
+             Description="程序本体、自带 Python 运行时、桌面客户端">
+      <ComponentGroupRef Id="Payload" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="DesktopShortcut" />
+    </Feature>
+
+    <!--
+      不在这里自动启动程序：msiexec 退出时会连带回收它启动的子进程，
+      实测 /qn 下窗口一闪就没。MSI 的惯例也是装完让用户点图标。
+      需要「装完立刻打开」的场景用安装版（Inno）那一份。
+    -->
+  </Product>
+</Wix>

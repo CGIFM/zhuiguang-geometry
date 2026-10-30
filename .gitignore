@@ -1,0 +1,32 @@
+# 运行时数据，绝不提交
+data/
+tmp/
+dist/
+userdata/
+*.pushstate
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# 可选组件（GPL，自行下载）
+vendor/libredwg/
+
+# 本地配置与凭据
+.zgr/config.local.json
+secrets.json
+*.log
+
+# 编辑器
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# 生成物
+*.zip
+!web/vendor/**/*.zip

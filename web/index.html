@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>追光几何</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">追</div>
+    <div class="brand-text"><b>追光几何</b><small>本地版本 · 内网同步 · 无限制</small></div>
+  </div>
+  <div class="proj-head">
+    <div class="proj-title" id="projTitle">未选择项目</div>
+    <button id="btnOpenProject" class="ghost" hidden title="在资源管理器中打开当前项目目录">打开文件夹</button>
+  </div>
+  <div class="top-actions">
+    <span class="pill live-pill" id="livePill" hidden>● 实时同步中</span>
+    <span class="pill" id="headPill">—</span>
+    <button id="btnSnapshot" class="primary">立即记录</button>
+    <button id="btnRefresh" title="刷新">刷新</button>
+  </div>
+</header>
+
+<main>
+  <aside class="sidebar">
+    <div class="side-head"><span>项目</span><span class="muted" id="projCount"></span></div>
+    <div id="projList" class="proj-list"></div>
+    <div id="peerBox" class="peer-box" hidden>
+      <div class="side-head peer-head">
+        <span>对方机器上的项目</span>
+        <span class="peer-tools">
+          <span class="muted" id="peerCount"></span>
+          <button id="btnPeerRefresh" class="mini-ghost" title="重新找一下局域网里的另一台电脑">↻</button>
+        </span>
+      </div>
+      <div id="peerList" class="proj-list peer-list"></div>
+    </div>
+    <div class="side-actions">
+      <button id="btnNew" class="primary-ghost">＋ 新建项目</button>
+      <button id="btnAdd" class="ghost">添加已有</button>
+      <button id="btnAddFolder" class="ghost" title="选一个文件夹，已经是追光项目就直接加入，不是就现场建立">＋ 添加文件夹</button>
+      <!-- 体检 / 查对象 / 清理 / 找零件 / 体积收进一个菜单：
+           五个常驻按钮在小窗口里会把上面的项目列表挤没，找项目反而更难 -->
+      <div class="tools-wrap">
+        <button id="btnTools" class="ghost tools-btn" aria-expanded="false"
+                title="体检、查对象、清理、找零件、体积都在这里">🛠 工具 <span class="caret">▾</span></button>
+        <div id="toolsMenu" class="tools-menu" hidden>
+          <button id="btnDoctor" class="ghost" title="一眼看清这个项目健不健康：有没有还没记录的改动、对方推的是否还压着、盘还剩多少、下一步该做什么（只读，不动任何文件）">🩺 体检</button>
+          <button id="btnFsck" class="ghost" title="深查对象库：文件内容缺没缺、坏没坏（只读，不会改任何图纸）">🔬 查对象</button>
+          <button id="btnGc" class="ghost" title="删掉的分支留下的老数据可以回收，让项目目录变小；先报数再动手">🧹 清理</button>
+          <button id="btnSearch" class="ghost" title="按零件名在**所有版本**里找（连已经删掉的零件也能找到）">🔍 找零件</button>
+          <button id="btnSize" class="ghost" title="看看这个项目被什么占着：图纸、版本历史、回收站、打包各多大">📦 体积</button>
+        </div>
+      </div>
+    </div>
+    <div class="side-foot">
+      <div class="muted small">本机 / 局域网地址</div>
+      <div id="urls" class="urls"></div>
+    </div>
+  </aside>
+
+  <section class="content">
+    <nav class="tabs" id="tabs">
+      <button data-tab="timeline" class="active">时间线</button>
+      <button data-tab="pending">未记录变更</button>
+      <button data-tab="sync">双机同步</button>
+      <button data-tab="settings">设置</button>
+    </nav>
+
+    <div class="tab-pane active" id="pane-timeline">
+      <div id="pendingBar" class="pending-bar" hidden></div>
+      <div id="banner" class="banner" hidden></div>
+      <div class="timeline-head">
+        <input id="searchBox" placeholder="搜索记录说明、记录人…">
+        <button id="btnMineOnly" class="ghost" title="只看这台机器记的版本">只看我的</button>
+        <span class="muted" id="timelineMeta"></span>
+        <span class="muted" id="branchName"></span>
+        <button id="btnBranch" class="ghost" title="从选中的版本分出一条新线">⎇ 新建分支</button>
+      </div>
+      <div class="day-note-row" id="dayNoteRow" hidden>
+        <button id="dayNote" class="day-note" type="button" aria-pressed="false"
+                title="点一下只留今天记的版本"> </button>
+        <button id="btnCopyToday" class="mini-ghost" type="button"
+                title="把今天改了什么复制成一段话，直接粘到群里">⧉ 复制</button>
+      </div>
+      <div id="findBox" class="find-box" hidden></div>
+      <div id="timeline" class="timeline"></div>
+    </div>
+
+    <div class="tab-pane" id="pane-pending">
+      <div class="pending-head">
+        <input id="commitMsg" placeholder="这次改了什么？（可留空自动命名）">
+        <button id="btnCommit" class="primary">记录一次</button>
+      </div>
+      <div id="pendingBody" class="pending-body"></div>
+    </div>
+
+    <div class="tab-pane" id="pane-sync">
+      <div id="pairState" class="pair-state">
+        <span class="pair-text">正在检查局域网里的另一台电脑…</span>
+        <button id="btnAutoPair" class="ghost">立即查找对方</button>
+      </div>
+      <div class="card live-card">
+        <h3>实时同步 · 两边自动跳动 <span class="live-dot" id="liveDot"></span></h3>
+        <p class="muted">开启后每隔几秒和对方对一次账：对方一保存，这边就自动下载并更新文件夹，
+          动态里能看到是谁改了什么。勾选「自动记录改动」后，本机改完文件只要停手十几秒就会
+          自动记录并同步，不用再点「立即记录」。</p>
+        <div class="row">
+          <label class="grow">对方地址<input id="liveUrl" placeholder="http://192.168.1.20:8795"></label>
+          <label>对账间隔（秒）<input id="liveInterval" type="number" min="5" max="3600" value="15"></label>
+        </div>
+        <div class="row">
+          <label class="grow">同步方式
+            <select id="liveMode">
+              <option value="split">各做各的 · 一人一条线（推荐）</option>
+              <option value="shared">共用一条线（分叉时自动合并）</option>
+            </select>
+          </label>
+        </div>
+        <p class="muted small" id="liveModeHint">一人一条线：我记的进我的分支、他记的进他的分支，
+          两条线都能看见对方的版本；要不要并、并哪几个，你自己点「并入」决定——程序不会替你们合。</p>
+        <div class="row live-opts">
+          <label class="check"><input type="checkbox" id="livePull" checked> 自动接收对方新版本</label>
+          <label class="check"><input type="checkbox" id="livePush" checked> 自动把本机新版本推过去</label>
+          <label class="check"><input type="checkbox" id="liveMerge" checked> 分叉时自动智能合并</label>
+          <label class="check"><input type="checkbox" id="liveCheckout" checked> 自动更新文件夹</label>
+          <label class="check"><input type="checkbox" id="liveWatch" checked> 自动记录改动（对方不点也能看到）</label>
+        </div>
+        <div class="row">
+          <button id="btnLiveOn" class="primary">开启实时同步</button>
+          <button id="btnLiveOff" class="ghost">暂停</button>
+          <span id="liveState" class="muted small">未开启</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>实时动态 <span class="muted small">（谁在什么时候改了什么）</span></h3>
+        <div id="liveFeed" class="live-feed"><div class="muted small">还没有动态。</div></div>
+      </div>
+      <div class="card">
+        <h3>与另一台机器同步</h3>
+        <p class="muted">两台机器都安装追光几何，其中一台运行服务（<code>zgr serve</code>），另一台填它的地址即可。</p>
+        <div class="row">
+          <label class="grow">对方地址<input id="syncUrl" placeholder="http://192.168.1.10:8795"></label>
+          <label>令牌（可不填）<input id="syncToken" placeholder="可选"></label>
+        </div>
+        <div class="row">
+          <label class="check"><input type="checkbox" id="syncCheckout" checked> 拉取后同时更新工作区文件</label>
+          <label class="check"><input type="checkbox" id="syncForce"> 工作区有改动也强制覆盖</label>
+        </div>
+        <div class="row">
+          <button id="btnPull" class="ghost">拉取</button>
+          <button id="btnPush" class="ghost">推送</button>
+          <button id="btnBoth" class="primary">双向同步</button>
+        </div>
+        <div class="row">
+          <label class="grow">或者用共享文件夹<input id="shareDir" placeholder="\\\\服务器\\共享\\追光"></label>
+        </div>
+        <div class="row">
+          <button id="btnSharePull" class="ghost">从共享文件夹拉取</button>
+          <button id="btnSharePush" class="ghost">推到共享文件夹</button>
+        </div>
+        <pre id="syncLog" class="sync-log">尚未同步。</pre>
+      </div>
+      <div class="card">
+        <h3>远端存储 · NAS / WebDAV / S3</h3>
+        <p class="muted">把版本库备份到 NAS 共享目录、WebDAV 空间或对象存储（S3 / MinIO / OSS）。
+          只传变化的对象；密码存在本机，不写进项目目录。</p>
+        <div id="remoteList" class="backup-list"><div class="muted small">尚未加载。</div></div>
+        <div class="row">
+          <label>类型
+            <select id="remoteKind">
+              <option value="local">共享目录 / NAS 挂载（SMB）</option>
+              <option value="webdav">WebDAV</option>
+              <option value="s3">S3 / MinIO / 阿里云 OSS</option>
+            </select>
+          </label>
+          <label class="grow">名称<input id="remoteName" placeholder="例如 公司NAS"></label>
+        </div>
+        <div class="row" data-rkind="local">
+          <label class="grow">路径<input id="remotePath" placeholder="\\NAS\备份\追光 或 Z:\追光"></label>
+        </div>
+        <div class="row" data-rkind="webdav">
+          <label class="grow">地址<input id="remoteDavUrl" placeholder="http://nas.local:5005/dav/追光"></label>
+          <label>用户<input id="remoteDavUser" autocomplete="off"></label>
+          <label>密码<input id="remoteDavPass" type="password" autocomplete="new-password"></label>
+        </div>
+        <div class="row" data-rkind="s3">
+          <label class="grow">端点<input id="remoteS3Endpoint" placeholder="https://s3.us-east-1.amazonaws.com"></label>
+          <label>bucket<input id="remoteS3Bucket" placeholder="zgr-backup"></label>
+          <label>区域<input id="remoteS3Region" placeholder="us-east-1"></label>
+        </div>
+        <div class="row" data-rkind="s3">
+          <label class="grow">AccessKey<input id="remoteS3Ak" autocomplete="off"></label>
+          <label class="grow">SecretKey<input id="remoteS3Sk" type="password" autocomplete="new-password"></label>
+        </div>
+        <div class="row">
+          <button id="btnAddRemote" class="primary">保存并测试</button>
+          <span class="muted small" id="remoteMeta"></span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>对方有哪些改动 · 选择性合并</h3>
+        <p class="muted">先检查对方（云端）比上次多了什么，再按文件决定要哪些：保留本机、采用对方、两边都留。合并会生成一个新版本，随时可以回退。</p>
+        <div class="row">
+          <label class="check"><input type="checkbox" id="mergeSmart" checked> 智能合并（文本自动逐行合并，合不动的保留本机）</label>
+        </div>
+        <div class="row">
+          <input id="mergeMsg" class="grow" placeholder="合并说明（可留空）">
+        </div>
+        <div class="row">
+          <button id="btnPlanMerge" class="ghost">检查对方改动</button>
+          <button id="btnApplyMerge" class="primary" disabled>合并所选</button>
+          <span class="muted small" id="mergeMeta"></span>
+        </div>
+        <div id="mergeBody" class="merge-body"><div class="muted small">尚未检查。</div></div>
+      </div>
+      <div class="card">
+        <h3>对方机器怎么连</h3>
+        <p class="muted">在 A 机运行 <code>zgr serve --port 8795</code>，B 机执行：</p>
+        <pre class="code">zgr sync "B机项目目录" --url http://A机IP:8795 --both --checkout</pre>
+        <p class="muted">也可以直接在网页里操作。同步只传变化的对象，不传整份目录。</p>
+      </div>
+    </div>
+
+    <div class="tab-pane" id="pane-settings">
+      <div class="card">
+        <h3>自动记录</h3>
+        <div class="row">
+          <label class="check"><input type="checkbox" id="watchOn"> 开启自动记录</label>
+          <label>检查间隔（秒）<input id="watchInterval" type="number" min="5" value="30"></label>
+          <button id="btnSaveWatch" class="ghost">保存</button>
+        </div>
+        <p class="muted">改动停止变化后自动生成一个版本；仅在服务运行时生效。</p>
+      </div>
+      <div class="card">
+        <h3>记录人姓名</h3>
+        <p class="muted">同步到对方后，时间线和实时动态里显示的就是这个名字。</p>
+        <div class="row">
+          <label class="grow">本机记录人<input id="authorName" placeholder="例如：小王 / A 机"></label>
+          <button id="btnSaveAuthor" class="ghost">保存</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>回收站 · 删除/覆盖前的文件</h3>
+        <p class="muted">同步、合并、恢复、回溯时被覆盖或删除的文件都会先放进这里，可以整批复原。
+          复原前还会把当前内容再备份一次，来回都能走。</p>
+        <div class="row">
+          <button id="btnLoadBackups" class="ghost">刷新备份列表</button>
+          <span class="muted small" id="backupMeta"></span>
+        </div>
+        <div id="backupList" class="backup-list"><div class="muted small">点「刷新备份列表」查看。</div></div>
+      </div>
+      <div class="card">
+        <h3>忽略规则</h3>
+        <p class="muted">一行一条，支持通配符，如 <code>*.log</code>、<code>临时</code>。</p>
+        <textarea id="ignoreBox" rows="8"></textarea>
+        <div class="row"><button id="btnSaveIgnore" class="ghost">保存忽略规则</button></div>
+      </div>
+      <div class="card">
+        <h3>访问令牌</h3>
+        <p class="muted">服务端设置了令牌时，本机浏览器也要带上它才能改东西。令牌只保存在本机浏览器。</p>
+        <div class="row">
+          <label class="grow">令牌<input id="uiToken" placeholder="留空表示没有设置令牌" autocomplete="off"></label>
+          <button id="btnSaveToken" class="ghost">保存</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>项目</h3>
+        <div class="row">
+          <button id="btnOpenFolder" class="ghost">打开项目目录</button>
+          <button id="btnPackLatest" class="ghost">打包最新版本</button>
+          <button id="btnRemove" class="danger-ghost">从列表移除</button>
+        </div>
+        <p class="muted">打包会生成一个 zip（含版本说明），直接发给别人就能打开；
+          移除只影响项目列表，不删除任何文件或历史记录。</p>
+      </div>
+    </div>
+  </section>
+
+  <aside class="detail" id="detail">
+    <div class="detail-empty">从左侧时间线选择一个版本查看详情</div>
+  </aside>
+</main>
+
+<div id="modalRoot"></div>
+<!-- earcut / loglevel 是 UMD 包，必须以普通脚本加载（模块里 this 是 undefined，装不上全局） -->
+<script src="vendor/deps/earcut.min.js"></script>
+<script src="vendor/deps/loglevel.min.js"></script>
+<!-- 预览引擎的裸模块名：dxf-viewer 内部 import "three" / "earcut" / "opentype.js"，
+     这里映射到随程序内置的文件，保证断网、内网都能用 -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.min.js",
+    "earcut": "./vendor/shim-earcut.js",
+    "loglevel": "./vendor/shim-loglevel.js",
+    "opentype.js": "./vendor/deps/opentype.module.js"
+  }
+}
+</script>
+<script type="module" src="meshview.js"></script>
+<script type="module" src="preview.js"></script>
+<!-- 缩略图补全：STEP/STL 这类服务端解不了的格式，由浏览器渲染后回存 -->
+<script type="module" src="thumbgen.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "_说明": "这是嘉立创 Ican 工具箱的 BOM 格式（取自它的 Ican工具箱BOM模板.xlsx）。把本文件复制到项目根目录、改名 bom-template.json，出的清单就和 Ican 的一致。field 只能取：no 序号、code 图号、name 名称、material 材质、surface 表面处理、brand 品牌、ptype 零件类型、qty 数量、unit 单位、level 层级、unit_mass 单重、total_mass 总重、note 备注。title/header 可以删掉，只要 columns 也行。",
+  "title": "嘉立创Ican工具箱",
+  "header": [
+    ["项目名称", "", "", "", "", "", "下单时间", "", ""],
+    ["客户", "", "", "", "", "", "交期", "", ""]
+  ],
+  "columns": [
+    ["序号", "no"],
+    ["图号", "code"],
+    ["零件名称", "name"],
+    ["材质", "material"],
+    ["表面处理", "surface"],
+    ["品牌", "brand"],
+    ["零件类型", "ptype"],
+    ["数量", "qty"],
+    ["单位", "unit"]
+  ]
+}
